@@ -2,10 +2,11 @@ package com.shubham0204.ml.blindcameradetection
 
 import android.Manifest
 import android.content.pm.PackageManager
-import androidx.appcompat.app.AppCompatActivity
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.AspectRatio
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -22,18 +23,32 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var viewBinding : ActivityMainBinding
     private val viewModel : UIViewModel by viewModels<UIViewModel>()
+    private lateinit var frameAnalyzer : FrameAnalyzer
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         viewBinding = ActivityMainBinding.inflate( layoutInflater )
         setContentView( viewBinding.root )
 
-        viewModel.isCameraBlinded.observe( this , { newValue ->
+        frameAnalyzer = FrameAnalyzer( viewModel )
 
+        viewModel.isCameraBlinded.observe( this , { newValue ->
+            if ( newValue ) {
+                viewBinding.cardView.setCardBackgroundColor( Color.YELLOW )
+            }
+            else {
+                viewBinding.cardView.setCardBackgroundColor( Color.WHITE )
+            }
         })
 
         viewModel.colorStdDev.observe( this , { newValue ->
-            viewBinding.textView.text = newValue
+            if (viewModel.isCameraBlinded.value == true) {
+                viewBinding.textView.text = "Camera Blocked \n $newValue"
+            }
+            else {
+                viewBinding.textView.text = newValue
+            }
+
         })
 
         if ( checkCameraPermission() ) {
@@ -42,6 +57,8 @@ class MainActivity : AppCompatActivity() {
         else {
             requestCameraPermission()
         }
+
+        frameAnalyzer.startDetection()
 
     }
 
@@ -84,14 +101,14 @@ class MainActivity : AppCompatActivity() {
             val cameraProvider = cameraProviderFuture.get()
             val preview : Preview = Preview.Builder().build()
             val cameraSelector : CameraSelector = CameraSelector.Builder()
-                .requireLensFacing( CameraSelector.LENS_FACING_FRONT )
+                .requireLensFacing( CameraSelector.LENS_FACING_BACK )
                 .build()
             preview.setSurfaceProvider( viewBinding.previewView.surfaceProvider )
             val imageFrameAnalysis = ImageAnalysis.Builder()
                 .setTargetAspectRatio( AspectRatio.RATIO_4_3 )
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
-            imageFrameAnalysis.setAnalyzer(Executors.newSingleThreadExecutor(), FrameAnalyzer( viewModel ) )
+            imageFrameAnalysis.setAnalyzer(Executors.newSingleThreadExecutor(), frameAnalyzer )
             cameraProvider.bindToLifecycle(this as LifecycleOwner, cameraSelector, preview , imageFrameAnalysis )
         }, ContextCompat.getMainExecutor(this) )
     }
